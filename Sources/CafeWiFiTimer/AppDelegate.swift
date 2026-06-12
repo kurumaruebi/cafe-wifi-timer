@@ -249,21 +249,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard let ssid else {
-            // 切断：自動開始したセッションは終了する。
-            if session?.ssid != nil {
-                session = nil
-                notifiedThresholds.removeAll()
-            }
+            // 切断：自動開始したセッションを終了し、接続記録もクリアする。
+            // 記録を消すことで、Wi-Fiを OFF→ON して再接続したときは
+            // 古い開始時刻を引き継がず、60:00 から正しくカウントし直す。
+            endAutoSession()
             return
         }
 
         // 対象カフェにマッチするか。
         guard let preset = presets.first(where: { $0.enabled && $0.ssid == ssid }) else {
-            // 対象外のWi-Fi。自動セッションを終了。
-            if session?.ssid != nil {
-                session = nil
-                notifiedThresholds.removeAll()
-            }
+            // 対象外のWi-Fi。自動セッションを終了し、接続記録もクリアする。
+            endAutoSession()
             return
         }
 
@@ -300,6 +296,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let lease = DHCPInfo.leaseStartTime() else { return now }
         // 未来の値（時計のずれ等）は採用しない。
         return lease <= now ? lease : now
+    }
+
+    /// 自動開始したセッションを終了し、接続記録（永続化）もクリアする。
+    /// Wi-Fi切断・対象外ネットワークへの移動で呼ばれる。
+    /// 手動セッション（ssid == nil）は切断と無関係なので残す。
+    private func endAutoSession() {
+        guard session?.ssid != nil else { return }
+        session = nil
+        notifiedThresholds.removeAll()
+        ConnectionStore.clear()
     }
 
     private func startSession(cafeName: String, ssid: String?, limitMinutes: Int?, startedAt: Date) {
